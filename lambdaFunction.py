@@ -1,34 +1,32 @@
 import json
 import boto3
+from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 
-client = boto3.client('dynamodb')
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('CapstoneDynamoDBTable')
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super(DecimalEncoder, self).default(obj)
 
 def lambda_handler(event, context):
-    vehicle_id = event.get('vehicleId')
+    vehicle_id = event.get('queryStringParameters', {}).get('vehicleId')
     
     if vehicle_id:
-        # Query for specific vehicleId
-        data = client.query(
-            TableName='CapstoneDynamoDBTable',
-            KeyConditionExpression='vehicleId = :vId',
-            ExpressionAttributeValues={
-                ':vId': {'S': vehicle_id}
-            }
+        response = table.query(
+            KeyConditionExpression=Key('vehicleId').eq(vehicle_id)
         )
+        items = response.get('Items', [])
     else:
-        # Scan entire table if no vehicleId is provided
-        data = client.scan(
-            TableName='CapstoneDynamoDBTable'
-        )
+        response = table.scan()
+        items = response.get('Items', [])
     
-    response = {
+    return {
         'statusCode': 200,
-        'body': json.dumps(data),
-        'headers': {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-        }
+        'body': json.dumps(items, cls=DecimalEncoder)
     }
-    
-    return response
+
 
